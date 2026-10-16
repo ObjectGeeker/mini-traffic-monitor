@@ -1,0 +1,5 @@
+.build/
+MiniTrafficMonitor.app/
+Resources/AppIcon.iconset/
+.DS_Store
+*.dSYM
