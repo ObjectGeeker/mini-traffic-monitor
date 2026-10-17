@@ -20,6 +20,26 @@ enum SelfTest {
         check("displayed(cpu+mem,2)==空", Sampler.displayed(enabled: [.cpu, .mem], drops: 2) == [])
         check("displayed(net,1)==空", Sampler.displayed(enabled: [.net], drops: 1) == [])
 
+        // 1a「仅图标」预设：标记位非空（不会被当成「从未配置」而回退 .all），但不含 cpu/mem/net，
+        // displayed() 原样放行，attributed() 里 cpu/mem/net 全不命中 → 落入空集渲染逻辑，直接是图标档
+        check("iconOnlyMarker 非空（不会回退成 .all）", !Segment.iconOnlyMarker.isEmpty)
+        check("displayed(iconOnlyMarker,0) 不含 cpu/mem/net",
+              Sampler.displayed(enabled: .iconOnlyMarker, drops: 0).intersection(.all).isEmpty)
+        check("displayed(iconOnlyMarker,9) 不含 cpu/mem/net(无需自动收缩也已是图标档)",
+              Sampler.displayed(enabled: .iconOnlyMarker, drops: 9).intersection(.all).isEmpty)
+
+        // 1b 无刘海兜底：safeMinX 不能退化到 0，否则挤压检测在无刘海屏幕上永不触发
+        check("effectiveSafeMinX(nil)==110(无刘海兜底)", Sampler.effectiveSafeMinX(notchMinX: nil) == 110)
+        check("effectiveSafeMinX(956)==956(刘海更靠右时刘海优先)", Sampler.effectiveSafeMinX(notchMinX: 956) == 956)
+        check("effectiveSafeMinX(50)==110(刘海比兜底还靠左时兜底更保守)", Sampler.effectiveSafeMinX(notchMinX: 50) == 110)
+
+        // 1c 收缩侧余量：净余量不足 20pt 仍判定不稳而继续收缩，不能刚过安全边界就停
+        // 回归用例：真机实测 minX=968 safeMin=956（净余量仅 12pt），旧逻辑在此卡死（见 docs/requirements.md）
+        check("shouldShrink(968,956)==true(净余量12pt<20pt,真机卡死复现)", Sampler.shouldShrink(minX: 968, safe: 956))
+        check("shouldShrink(955,956)==true(已越界)", Sampler.shouldShrink(minX: 955, safe: 956))
+        check("shouldShrink(976,956)==false(刚好够20pt余量)", !Sampler.shouldShrink(minX: 976, safe: 956))
+        check("shouldShrink(996,956)==false(远超余量)", !Sampler.shouldShrink(minX: 996, safe: 956))
+
         // 2 定宽：任意数值帧在 usage / pressure 两模式下各自宽度恒定
         let cpuVals: [Double?] = [nil, 0, 5, 9, 10, 99, 100]
         let rateVals: [Double?] = [nil, 0, 9.94, 9.96, 10, 99.94, 99.96, 100, 1023, 1048576, 1073741824]
@@ -61,12 +81,13 @@ enum SelfTest {
         let menu = NSMenu()
         builder.menuNeedsUpdate(menu)
         let titles = menu.items.map { $0.title }
-        // 无快照时信息区跳过：3 开关 + 2 内存内容 + 2 预设 + 开机自启 + 退出 + 4 分隔 = 13
-        check("菜单项数 == 13（实际 \(titles.count)）", titles.count == 13)
+        // 无快照时信息区跳过：3 开关 + 2 内存内容 + 3 预设 + 开机自启 + 退出 + 4 分隔 = 14
+        check("菜单项数 == 14（实际 \(titles.count)）", titles.count == 14)
         check("含 开机自启", titles.contains("开机自启"))
         check("含 栏内显示：CPU", titles.contains("栏内显示：CPU"))
         check("含 内存内容：压力", titles.contains("内存内容：压力"))
         check("含 预设：极简（仅网速）", titles.contains("预设：极简（仅网速）"))
+        check("含 预设：仅图标（无数值）", titles.contains("预设：仅图标（无数值）"))
         check("含 退出项", titles.contains(where: { $0.hasPrefix("退出") }))
 
         print(ok ? "SELFTEST OK" : "SELFTEST FAILED")

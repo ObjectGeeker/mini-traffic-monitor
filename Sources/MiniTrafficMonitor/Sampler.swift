@@ -64,7 +64,8 @@ final class Sampler {
                                m.compressedBytes / 1073741824, m.pressureLevel)
             }
             if let minX = controller?.itemMinX {
-                line += String(format: " minX=%.0f safeMin=%.0f", minX, controller?.safeAreaMinX ?? 0)
+                line += String(format: " minX=%.0f safeMin=%.0f", minX,
+                               Self.effectiveSafeMinX(notchMinX: controller?.safeAreaMinX))
             }
             FileHandle.standardError.write((line + "\n").data(using: .utf8)!)
         }
@@ -106,19 +107,43 @@ final class Sampler {
         [Segment.cpu, .mem, .net].reduce(0) { $0 + (s.contains($1) ? 1 : 0) }
     }
 
-    /// 左边缘伸进刘海安全区即降档（立即）。
-    /// 升档为**慢速自愈**：预测 fit 且余量 ≥ 40pt（大于实测 ~20pt 的右边缘漂移）并持续 30s 才升一档，
+    /// 无刘海屏幕的左侧兜底余量：任何 App 菜单最窄也有 Apple 图标 + 应用名等，不可能挤到 0。
+    /// 实测（人为填塞 6 个共 2520pt 的假状态项）：被挤压时左边缘稳定在几百 pt 的正值区间，
+    /// 几乎不会归零/变负——纯靠 `minX < 0` 在无刘海屏幕上等于永远不收缩，此兜底把触发点提前。
+    static let genericLeftMargin: CGFloat = 110
+
+    /// 有刘海用刘海安全区左边界（更精确，是实测的物理遮挡边界）；无刘海时退到通用兜底余量
+    static func effectiveSafeMinX(notchMinX: CGFloat?) -> CGFloat {
+        max(notchMinX ?? 0, genericLeftMargin)
+    }
+
+    /// 收缩侧余量：净余量 < 20pt 时仍判定「不够稳」而继续降档，而不是刚越过安全边界就停。
+    /// 20pt 复用文档已实测的状态项右边缘自身漂移量（见 docs/requirements.md「升档为何要慢」）——
+    /// 小于这个量级的净余量本身就落在测量噪声带内，不能当作稳定 fit。
+    /// 必须 < growMargin，否则两侧条件会在同一区间重叠，退化成每秒闪烁的降档/升档极限环。
+    static let shrinkRestMargin: CGFloat = 20
+    /// 升档侧余量（> shrinkRestMargin），与其之间留出 [safe+20, safe+40) 死区，
+    /// 降档判定"当前档"、升档判定"预测的少一档"配置，两者互不重叠
+    static let growMargin: CGFloat = 40
+
+    /// 纯函数化的收缩判定，供 SelfTest 在无真实 NSStatusItem 时断言（同 effectiveSafeMinX 的做法）
+    static func shouldShrink(minX: CGFloat, safe: CGFloat, margin: CGFloat = shrinkRestMargin) -> Bool {
+        minX < safe + margin - 0.5
+    }
+
+    /// 净余量不足 shrinkRestMargin 即降档（立即）。
+    /// 升档为**慢速自愈**：预测 fit 且余量 ≥ growMargin（大于实测 ~20pt 的右边缘漂移）并持续 30s 才升一档，
     /// 避免回到每秒极限环闪烁，同时能在菜单栏空间恢复后自动回升。
     private func adjustFit() {
         guard let minX = controller?.itemMinX, minX > 0 else { return }
-        let safe = controller?.safeAreaMinX ?? 0
+        let safe = Self.effectiveSafeMinX(notchMinX: controller?.safeAreaMinX)
         let enabled = Preferences.shared.enabledSegments
-        if minX < safe - 0.5, dropCount < Self.segmentCount(enabled) {
+        if Self.shouldShrink(minX: minX, safe: safe), dropCount < Self.segmentCount(enabled) {
             dropCount += 1
             calmTicks = 0
             render()
         } else if dropCount > 0 {
-            calmTicks = predictedFits(drops: dropCount - 1, margin: 40) ? calmTicks + 1 : 0
+            calmTicks = predictedFits(drops: dropCount - 1, margin: Self.growMargin) ? calmTicks + 1 : 0
             if calmTicks >= 30 {
                 calmTicks = 0
                 dropCount -= 1
@@ -138,7 +163,7 @@ final class Sampler {
                                             compressedBytes: 0, percent: 88, pressureLevel: 1),
             net: NetworkSampler.NetSample(downBytesPerSec: 8888, upBytesPerSec: 8888, interfaceName: "", ipAddress: nil),
             shown: shown, mode: Preferences.shared.memoryMode)
-        return (maxX - ctrl.width(of: dummy.string)) >= (ctrl.safeAreaMinX ?? 0) + margin
+        return (maxX - ctrl.width(of: dummy.string)) >= Self.effectiveSafeMinX(notchMinX: ctrl.safeAreaMinX) + margin
     }
 
     // MARK: - 定宽格式化（FR-1）：字段宽度恒定，避免状态项宽度每秒变化导致相邻图标抖动

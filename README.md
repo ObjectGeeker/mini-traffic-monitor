@@ -14,17 +14,18 @@ macOS 状态栏常驻的极致轻量资源监控：CPU 占用率、内存占用�
 
 或直接 `open MiniTrafficMonitor.app`。
 
-菜单栏读数默认形如 `C 24% M 50% ↓ 4.0K ↑ 1.0K`（全等宽字体，宽度恒定不抖动）。
-点击图标展开面板：完整四指标、栏内显示开关、内存内容（占用率/压力）切换、预设、开机自启、退出。
+菜单栏读数默认只显示网速，形如 `↓ 4.0K ↑ 1.0K`（全等宽字体，宽度恒定不抖动）；CPU/内存需要时自行勾选，
+或点面板里的「完整」预设一次性全开。
+点击图标展开面板：完整四指标、栏内显示开关、内存内容（占用率/压力）切换、预设（完整/极简/仅图标）、开机自启、退出。
 悬停图标显示全量 tooltip。
 
-菜单栏空间不足（刘海机型拥挤）时会自动降档精简（只降不升），面板中会提示当前精简结果；
-改偏好或点预设会重新尝试全开。
+菜单栏空间不足（拥挤）时会自动降档精简到仅剩一个状态点图标（只降不升，点击仍可展开面板看完整信息）；
+改偏好或点预设会重新尝试恢复到当前偏好对应的档位。
 
 ## 验证 / 自测
 
 ```bash
-MTM_SELFTEST=1 ./MiniTrafficMonitor.app/Contents/MacOS/MiniTrafficMonitor   # 20 项无 UI 自测
+MTM_SELFTEST=1 ./MiniTrafficMonitor.app/Contents/MacOS/MiniTrafficMonitor   # 33 项无 UI 自测
 MTM_DEBUG=1    ./MiniTrafficMonitor.app/Contents/MacOS/MiniTrafficMonitor   # 每秒读数 + 内存分解 + 布局诊断
 MTM_LOGIN_TEST=1 ./MiniTrafficMonitor.app/Contents/MacOS/MiniTrafficMonitor # 开机自启注册往返测试
 ./tools/measure-lightweight.sh 86400 30    # 24h 轻量性验收（NFR-1/2/3），输出 CSV 与摘要

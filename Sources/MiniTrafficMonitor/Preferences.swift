@@ -11,6 +11,10 @@ struct Segment: OptionSet {
     static let mem = Segment(rawValue: 1 << 1)
     static let net = Segment(rawValue: 1 << 2)
     static let all: Segment = [.cpu, .mem, .net]
+    /// 「仅图标」预设的持久化标记位，不代表任何可显示指标。
+    /// 单纯存 rawValue=0 会被 Preferences.enabledSegments 的 getter 当成「从未配置」而回退成 .all，
+    /// 需要一个非零、且不含 cpu/mem/net 的值来表达「用户明确选了仅图标」
+    static let iconOnlyMarker = Segment(rawValue: 1 << 3)
 }
 
 final class Preferences {
@@ -27,9 +31,11 @@ final class Preferences {
         get {
             // 用 integer 而非 object as? Int：后者对 NSNumber 桥接可能失败而静默回退默认值
             let raw = defaults.integer(forKey: "visibleSegments")
-            guard raw != 0 else { return .all }
+            // 默认仅网速（而非三段全开）：平时栏内干净，压力大时交给 FR-1 收缩到图标档；
+            // 想看 CPU/内存就手动勾选或切「完整」预设
+            guard raw != 0 else { return .net }
             let s = Segment(rawValue: raw)
-            return s.isEmpty ? .all : s
+            return s.isEmpty ? .net : s
         }
         set { defaults.set(newValue.rawValue, forKey: "visibleSegments") }
     }

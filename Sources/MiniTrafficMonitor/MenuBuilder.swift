@@ -42,7 +42,8 @@ final class MenuBuilder: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         for (title, preset) in [("预设：完整（三段全开）", Segment.all),
-                                ("预设：极简（仅网速）", Segment.net)] {
+                                ("预设：极简（仅网速）", Segment.net),
+                                ("预设：仅图标（无数值）", Segment.iconOnlyMarker)] {
             let it = NSMenuItem(title: title, action: #selector(applyPreset(_:)), keyEquivalent: "")
             it.target = self
             it.representedObject = preset
